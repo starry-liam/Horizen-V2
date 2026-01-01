@@ -28,16 +28,12 @@ float readFloatFromEEPROM(int address) {
   }
   
   void clearEEPROM() {
-    byte zeros[32] = {0}; // Buffer of 32 zeros
+    byte zeros[32] = {0}; // Buffer of 256 zeros
     for (int i = 0; i < 100000; i += 32) { 
-      eeprom.write(i, zeros, 32); // Write 32 zeros at a time
+      eeprom.write(i, zeros, 32); // Write 255 zeros at a time
        // Yield to prevent watchdog timer reset
+       delay(10);
        Serial.println(i);
-       if (readFloatFromEEPROM(i) == 0)
-       {
-        break;
-       }
-       
        delay(10);
     }
   }

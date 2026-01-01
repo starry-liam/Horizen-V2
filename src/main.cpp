@@ -3,11 +3,9 @@
 #include <Arduino.h>
 
 #include "Constants.hpp"
-#include "functions/altRead.hpp"
+#include "functions/barometer.hpp"
 #include "functions/blink.hpp"
 #include "functions/eeprom.hpp"
-#include "functions/print.hpp"
-#include "functions/Detect.hpp"
 
 
 // Use classes or structs to group related parameters together
@@ -24,13 +22,13 @@
 
 int butt = 0; // Button state
 
+bool logLock = false;
 
-unsigned long gtime; // General Time variable
-int ltime = 0; // LED time variable
-
-int state[5]; // Array for storing the state of the rocket
+float starttime; // General Time variable
 
 bool logging = false; // Logging detection
+
+void print();
 
 void setup() {
   // put your setup code here, to run once:
@@ -48,80 +46,98 @@ void setup() {
   status = bmp.begin();
   if (!status) {
     digitalWrite(LED, HIGH);
-    while (1);
+    while (1){
+      delay(20);
+    }
   } else {
     led(200, 2);
   }
-  bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,
-                  Adafruit_BMP280::SAMPLING_X2,
-                  Adafruit_BMP280::SAMPLING_X16,
-                  Adafruit_BMP280::FILTER_X16,
-                  Adafruit_BMP280::STANDBY_MS_500);
-  delay(200);
+bmp.setSampling(
+      Adafruit_BMP280::MODE_NORMAL,
+      Adafruit_BMP280::SAMPLING_X2,
+      Adafruit_BMP280::SAMPLING_X4,
+      Adafruit_BMP280::FILTER_X4,
+      Adafruit_BMP280::STANDBY_MS_1);
+  delay(500);
+
   altZero();
 
-  gtime = millis(); // Initialize gtime with millis()
+  starttime = millis(); // Initialize gtime with millis()
 
   adr = 4; // Initialize adr with 4
 
-  if (readFloatFromEEPROM(0) != 0) {
-    logging = true;
-    apg = readFloatFromEEPROM(0);
-    Serial.println("Previous flight detected");
-    Serial.print("Apogee: ");
-    Serial.println(apg);
-    led(75, 3);
+  float preVar = readFloatFromEEPROM(0);
+
+  if (preVar != 0) {
+
+  }     
+  float dZone = millis(); //start deadzone var
+  while(1){
+      dZone = millis();
+      if(analogRead(but)>500){
+        //clearEEPROM();
+        print();
+        logLock = true;
+        break;
+      }
+      else if(dZone > 60000){
+
+            break;
+      }
+      delay(10);
+      
   }
 
 }
-
-
+void print() {
+    delay(5000);
+    adr = 4;
+    tadr = 8;
+      while(analogRead(but) < 500) {
+          tadr = adr + 4;
+  
+          Serial.print(readFloatFromEEPROM(tadr));
+          Serial.print(", ");
+          Serial.print(readFloatFromEEPROM(adr));
+          Serial.print(", ");
+          Serial.println(adr);
+          delay(25);
+          adr += 8;   
+          led(20, 1); 
+     }
+}
 // Don't have void functions that work on global variables
 // Use parameters and return values instead
 // This makes your code easier to understand and maintain
 // if this is your main loop, label it as such
-void loop() {
-
-  if (logging) {
-    print();
-  }
-
+void loop() { //main 
   // if your main loop function has its own delay, in a sub-function this 
   // wrecks your iteration rate. Fix this
-  if (landDetect() == true) {
-    led(100, 4);
-    split(apg);
-    while(1) {
-      pulse();
-    }
+
+  float curtime = millis();// finds current time stamp from power on in ms
+  float elapsed = (curtime - starttime) / 1000.0; //subtract current time from start time in ms and convert to s
+  tadr = adr + 4;// ensure timestamp address is offset
+  float filtAlt = altRead(zero);
+  if (!logLock) {
+    writeFloatToEEPROM(adr, filtAlt); // write
+    delay(10); //delay bc idk tbh
+    writeFloatToEEPROM(tadr, elapsed);
   }
 
-  unsigned long curtime = millis();
-  float elapsed = (curtime - gtime) / 1000.0;
-  tadr = adr + 4;
-
-  writeFloatToEEPROM(adr, altRead(10, zero));
-  delay(10);
-  writeFloatToEEPROM(tadr, elapsed);
-
-  apgDetect();
-  landDetect();
 
   Serial.print(readFloatFromEEPROM(tadr));
   Serial.print(", ");
   Serial.print(adr);
+  delay(10);
   Serial.print(", ");
   Serial.println(readFloatFromEEPROM(adr));
+  // Serial.print(", ");
+  // Serial.println(filtAlt);
 
-  // if (analogRead(but) > 500) {
-  //   apogee = true;
-  //   apg = 2564;
-  //   delay(20);
-  //   writeFloatToEEPROM(0, apg);
-  //   Serial.println("Simulated apogee");
-  //   led(200, 3);
-  // }
+  if (analogRead(but) > 500) {
+    //clearEEPROM();
+  }
 
-  adr += 8;
-  led(20, 1);
+  adr += 8; //add 8 bytes to compensate for timestamp
+  led(20, 1); // flash LED 
 }
